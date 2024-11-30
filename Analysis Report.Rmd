@@ -1,0 +1,147 @@
+---
+title: 
+output: pdf_document
+geometry: margin= 1.3cm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analysis Report
+## Data Summary
+
+The dataset refers to pay rates, geographical locations, job titles and job categories of occupations around the globe. It has 19 unique variables and 1655 observations. The dataset includes both categorical and continuous variables. The focus of this report is mainly on : ***location_country*** : country where the job is located, ***annual_base_pay*** : The annual base pay of job (min : 0, max :10.28m, mean : 136406, median : 100000). This report is formulated to compare the trends of annual base pay in the ***United States*** versus ***Other Countries***. 
+
+```{r , echo=FALSE, results='hide', message=FALSE}
+#read the database
+library(tidyverse)
+library(stringr)
+nd_country <- read.csv("/Users/amandeepkaur/Desktop/MSCI718/Assignments/Assignment 1/salaries_clean_new.csv")
+```
+
+```{r, echo =FALSE, results='hide'}
+#omit all the datapoints where value is NA
+nd_country <- na.omit(nd_country)
+```
+
+
+```{r, echo =FALSE}
+#select only the required variables
+nd_country <- select(nd_country, location_country, annual_base_pay)
+```
+
+
+```{r, echo =FALSE}
+#change the datatypes
+nd_country$annual_base_pay <- as.double(nd_country$annual_base_pay)
+nd_country$location_country <- as.factor(nd_country$location_country)
+```
+
+
+```{r, echo =FALSE, results='hide'}
+#Check for any missing values of salary
+nd_country %>% summarize(missing_salary = sum(is.na(annual_base_pay)))
+```
+## Data Cleaning and Pre-processing
+
+After closely inspecting the data, observations were found to have "NA" values, as these values may pose a bias in the results, for the scope of this analysis, NA values are omitted leaving 561 observations. The analysis is performed on salaries in the US vs Other Countries so ***annual_base_pay*** and ***location_country*** variables are selected, rest of the redundant data is dropped. Furthermore, annual_base_pay variable is of category “num”, which is changed to "double", since this variable is used for mathematical calibrations and double is the preferred datatype for such calculations. The variable location_name is of type "chr", and is converted to "factor" as factors take up less space in memory and comparison computation is also quicker. After converting the type of variables, the data is tested for any missing values of salaries, which turned out to be nil.
+
+## Planning And Analysis
+
+
+After initial observations, it is observed that the salaries in the US are on a higher end when compared to rest of the world in the dataset. The hypothesis formulated from this observation is **"Annual base pay rate is more in the US compared to Other Countries"**. Analysis is performed to test the hypothesis that includes plotting the data, for plotting, it is suitable if there is a variable to discriminate between the US and rest of the countries, thus the data is mutated to add a new variable ***territory*** of type "factor". The plotted data outlines a few outliers. When the data is analysed, some of the salaries between 0 and 200 are detected, these values are erroneous because yearly salary cannot be in this range and are removed. A few of the values are close to 10m which in turn are shifting the mean of the salaries, it is therefore justified to remove the extreme values and maintain an even distribution of pay rates. To remove such outliers Interquartile Range Method^[Q1 = First 25% of observations, Q3= First 75% of observations, IQR = Q3-Q1 (middle 50% of observations). Any observation falling outside the fence of 1.5IQR+Q3 and 1.5IQR-Q1 is removed] is used in this analysis. Further interesting fact is that the US has the maximum number of tech jobs in the dataset. 
+
+Once, the outliers are removed, the data is examined for normal distribution by plotting the Q-Q graphs, which showcased that the salary distributions of the US and Other Countries follow a near normal distribution. After closely examining the data it is detected that salaries in the US are spread throughout ranging from 50k to above 200k, whereas for Other Countries, the density is prevalent towards the lower end and only a few are between the range of 150k and 160K. This in turn supports the hypothesis stated in the analysis. Closely scrutinizing the distribution graphs, it infers that the mean salary for the US falls closely near the 100k mark as compared to Other Countries which is below 100K thereby complementing the hypothesis.
+```{r, echo =FALSE}
+#mutate the dataset
+nd_country <- nd_country %>% mutate(territory = ifelse(nd_country$location_country %in% c("US"), "US", "Others"))
+nd_country$territory <- as.factor(nd_country$territory)
+```
+
+```{r, echo =FALSE, results='hide', message=FALSE, fig.show='hide'}
+#plotting the graph for annual_base_pay and checking for any outliers
+nd_country %>% filter(location_country == "US") %>% 
+  ggplot(aes(x=seq(annual_base_pay), y=annual_base_pay)) + geom_point()
+
+nd_country %>% filter(location_country != "US") %>% 
+  ggplot(aes(x=seq(annual_base_pay), y=annual_base_pay)) + geom_point()
+
+nd_country %>% 
+  ggplot(aes(x=seq(annual_base_pay), y=annual_base_pay, color = territory)) + 
+  geom_point() +
+  geom_smooth(se = FALSE)
+```
+
+```{r, echo =FALSE}
+#filtering out the outliers
+q1_us <- as.double(quantile(select(filter(nd_country, location_country == "US"), annual_base_pay)$annual_base_pay, 0.25))
+q3_us <-as.double(quantile(select(filter(nd_country, location_country == "US"), annual_base_pay)$annual_base_pay, 0.75))
+
+q1_other <-as.double(quantile(select(filter(nd_country, location_country != "US"), annual_base_pay)$annual_base_pay, 0.25))
+q3_other <-as.double(quantile(select(filter(nd_country, location_country != "US"), annual_base_pay)$annual_base_pay, 0.75))
+
+no_outlier_us <- nd_country
+no_outlier_us <- no_outlier_us %>% filter(location_country == "US" & annual_base_pay > (1.5*(q3_us - q1_us) - q1_us))
+no_outlier_us <- no_outlier_us %>% filter(location_country == "US" & annual_base_pay < (1.5*(q3_us - q1_us) + q3_us))
+
+no_outlier_other <- nd_country
+no_outlier_other <- no_outlier_other %>% filter(location_country != "US" & annual_base_pay > (1.5*(q3_other - q1_other) - q1_other))
+no_outlier_other <- no_outlier_other %>% filter(location_country != "US" & annual_base_pay < (1.5*(q3_other - q1_other) + q3_other))
+ 
+nd_country <- rbind(no_outlier_us, no_outlier_other)
+```
+
+
+```{r, echo =FALSE, fig.align='center', fig.dim=c(5,2.5), warning=FALSE, message=FALSE}
+#Plots
+
+nd_country %>% 
+  ggplot(aes(x=annual_base_pay)) + theme(legend.position = "none") +
+  geom_histogram(aes(y=..density.., color = territory), fill = "white") + 
+    stat_function(fun=dnorm, args=list(mean=mean(nd_country$annual_base_pay, na.rm=TRUE), sd=sd(nd_country$annual_base_pay, na.rm=TRUE))) + facet_grid(.~ nd_country$territory) +
+  labs(x = "Annual Salary", y ="", subtitle  = "Salary Distribution")
+
+nd_country%>%
+  ggplot() + geom_histogram(aes(x = annual_base_pay, color = territory), fill = "white") + labs(x = "Annual Salary", y="", color = "Countries" , subtitle = "Salary Comparison US vs Other Countries")
+
+```
+
+
+```{r, echo=FALSE, fig.show='hide', warning=FALSE, message=FALSE}
+nd_country %>% filter(location_country == "US") %>% 
+  ggplot(aes(annual_base_pay)) + geom_histogram( fill = "turquoise") +
+  labs(x = "Salary in US", y ="")
+
+nd_country %>% filter(location_country != "US") %>% 
+  ggplot(aes(annual_base_pay)) + geom_histogram(fill = "skyblue") +
+  labs(x = "Salary in Other Countries", y ="")
+
+nd_country %>% ggplot(aes(sample= annual_base_pay)) + stat_qq() + 
+  facet_grid(.~ nd_country$territory) +
+  geom_qq_line(color = "red") + 
+  labs(y = "Salary", x ="")
+
+nd_country %>% 
+  ggplot(aes(annual_base_pay, fill= territory)) + geom_histogram()
+```
+
+The salary distribution so far is supporting the hypothesis but to confirm further, this analysis incorporates the 95% Confidence Intervals^[95% probability of output to fall between the two intervals.]. The datapoints for both the US and Other Countries > 30, hence by invoking the Central Limit Theorem^[Central Limit Theorem states that if the random sample size is sufficiently large than the sample distribution means follow an approximate normal distribution], the distribution of salaries is treated to be normal. The plot for Confidence Intervals^[Confidence Interval states that the probability of output parameter to fall between set of two values.] represents the 95%CI for the sample of the US and Other Country's salaries. The CI interval for the US ranges between (97953.3 , 105576.6) and for the Other Countries between (69841.8 , 78964.6) .It is evident from the graph that the CIs of the samples do not overlap, which proves that the samples come from different set of populations and one population has interval higher than the other. These findings supplement the hypothesis even further that the salaries in the US are more when compared to the Other Countries.
+
+```{r, echo = FALSE, fig.dim = c(6,2.7) , message = FALSE, warning = FALSE, fig.align='center'}
+#plotting the confidence intervals
+sample_final <- nd_country %>% filter(territory == "US") %>% sample_n(90) %>%  mutate(confidence = "US")
+sample_final <- rbind(sample_final, nd_country %>% filter(territory != "US") %>% sample_n(90) %>% mutate(confidence = "Others"))
+sample_final <- sample_final %>% group_by(confidence) %>% summarise(total=n(), avg_salary = mean(annual_base_pay), se = sd(annual_base_pay/sqrt(n())))
+
+ggplot(sample_final, aes(x= avg_salary, y= confidence)) +
+  geom_point() +
+  geom_errorbar(aes(xmax = avg_salary + 1.96*se, xmin = avg_salary - 1.96*se, color = confidence)) +
+  geom_label(aes(label = format(round(avg_salary, 3), nsmall = 3)), nudge_y = 0.3) + 
+  labs(x = "Average Salary", subtitle = "Confidence Intervals for Salary comparison", y ="", color = "Samples") 
+```
+
+
+
+## Conclusion 
+In order to test the hypothesis **Annual base pay rate is more in the US compared to Other Countries**, multifarious steps were performed. Primitively cleaning and refining the data, mutating the variables, visualizing using graphs and discovering the outliers and anomalies, removing the outliers using Interquartile Range Method, checking for the data to be normally distributed, invoking Central Limit Theorem to calculate 95% Confidence Intervals for samples in the process. The average salaries for 95%CI falls under the range (97953.3 , 105576.6) for the US and (69841.8 , 78964.6) for the Other Countries. The stated measures provided a step by step approach towards confirming and supporting the hypothesis. The above mentioned analysis clearly outlines that the salaries in the US are far greater than the Other Countries. Thereby, proving the hypothesis "Annual base pay rate is more in the US compared to Other Countries". 
